@@ -141,7 +141,7 @@ class FTPHook(BaseHook):
         conn = self.get_conn()
         conn.rmd(path)
 
-    def retrieve_file(self, remote_full_path, local_full_path_or_buffer):
+    def retrieve_file(self, remote_full_path, local_full_path_or_buffer, binary_mode=True):
         """
         Transfers the remote file to a local location.
 
@@ -166,15 +166,19 @@ class FTPHook(BaseHook):
 
         remote_path, remote_file_name = os.path.split(remote_full_path)
         conn.cwd(remote_path)
-        logging.info('Retrieving file from FTP: {}'.format(remote_full_path))
-        conn.retrbinary('RETR %s' % remote_file_name, output_handle.write)
-        logging.info('Finished retrieving file from FTP: {}'.format(
-            remote_full_path))
+        logging.info('Retrieving file from FTP in {} transfer mode: {}'.format(
+            'binary' if binary_mode else 'ASCII', remote_full_path))
+        if binary_mode:
+            conn.retrbinary('RETR %s' % remote_file_name, output_handle.write)
+        else:
+            conn.retrlines('RETR %s' % remote_file_name, output_handle.write)
+        logging.info('Finished retrieving file from FTP in {} transfer mode: {}'.format(
+            'binary' if binary_mode else 'ASCII', remote_full_path))
 
         if is_path:
             output_handle.close()
 
-    def store_file(self, remote_full_path, local_full_path_or_buffer):
+    def store_file(self, remote_full_path, local_full_path_or_buffer, binary_mode=True):
         """
         Transfers a local file to the remote location.
 
@@ -198,7 +202,14 @@ class FTPHook(BaseHook):
             input_handle = local_full_path_or_buffer
         remote_path, remote_file_name = os.path.split(remote_full_path)
         conn.cwd(remote_path)
-        conn.storbinary('STOR %s' % remote_file_name, input_handle)
+        logging.info('Storing file in FTP in {} transfer mode: {}'.format(
+            'binary' if binary_mode else 'ASCII', remote_full_path))
+        if binary_mode:
+            conn.storbinary('STOR %s' % remote_file_name, input_handle)
+        else:
+            conn.storlines('STOR %s' % remote_file_name, input_handle)
+        logging.info('Finished storing file in FTP in {} transfer mode: {}'.format(
+            'binary' if binary_mode else 'ASCII', remote_full_path))
 
         if is_path:
             input_handle.close()
