@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import random
+
 from apiclient.discovery import build
 from apiclient.http import MediaFileUpload
 from googleapiclient import errors
@@ -263,3 +265,92 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
                 # empty next page token
                 break
         return ids
+
+    def compose(self, bucket, destination_object, source_objects,
+            mime_type='application/octet-stream'):
+        """
+        Concatenates a list of existing objects into a new object in the same
+        bucket with deletion of existing objects if requested
+        
+        :param bucket
+        :type bucket: string
+        :param destination_object
+        :type destination_object: string
+        :param source_objects
+        :type source_objects: string
+        :param mime_type
+        :type mime_type: string
+        """    
+
+        # Credits: https://stackoverflow.com/a/434328
+        def _chunker(seq, size):
+            return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
+
+        def _compose(bucket, destination_object, source_objects, mime_type):
+            
+            body = {}
+            body['destination'] = {'contentType': mime_type}
+            body['sourceObjects'] = [{'name': object} for object in source_objects]
+            
+            print(body)
+
+            try:
+                service \
+                    .objects() \
+                    .compose(destinationBucket=bucket,
+                             destinationObject=destination_object,
+                             body=body) \
+                    .execute()
+                return True
+            except errors.HttpError as ex:
+                if ex.resp['status'] == '404':
+                    return False
+                raise
+
+        if not source_objects:
+            raise ValueError('source_objects cannot be empty')
+        if len(source_objects) > 1024:
+            raise ValueError('Components of a composite file cannot be more than 1024')
+
+        service = self.get_conn()
+      
+
+        composite_objects = source_objects
+
+        partial_composites_working_area = ''
+        if destination_object[0].rpartition('/')[0]:
+            partial_composites_working_area = '{}/'.format(destination_object[0].rpartition('/')[0])
+        partial_composites_working_area += '%x' % random.getrandbits(64)
+
+        while len(composite_objects) > 32:
+            partial_composites_objects = list()
+            partial_composites_objects_counter = 0
+            
+            for chunk_composite_objects in _chunker(composite_objects, 32):
+
+                partial_destination_object = '{}.{}'.format(destination_object[0].rpartition('/')[2], str(partial_composites_objects_counter).zfill(2))
+                if _compose(
+                        bucket,
+                        '{}/{}'.format(partial_composites_working_area, partial_destination_object),
+                        chunk_composite_objects,
+                        mime_type):
+                    partial_composites_objects.append(partial_destination_object)
+                    partial_composites_objects_counter += 1
+                else:
+                    return False
+
+            composite_objects = partial_composites_objects
+
+        if len(source_objects) <= 32:
+            return _compose(
+                    bucket,
+                    destination_object,
+                    source_objects,
+                    mime_type)
+        else:
+            return _compose(
+                    bucket,
+                    destination_object,
+                    ['{}/{}'.format(partial_composites_working_area,composite_object) for composite_object in composite_objects],
+                    mime_type)
+
