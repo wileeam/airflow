@@ -21,7 +21,130 @@ from apiclient.discovery import build
 from googleapiclient import errors
 
 from airflow.contrib.hooks.gcp_api_base_hook import GoogleCloudBaseHook
+from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.exceptions import AirflowException
+
+# class _GoogleCloudSQLJob(LoggingMixin):
+#     # {u'status': u'PENDING', u'insertTime': u'2018-05-08T11:15:18.432Z', u'exportContext': {u'kind': u'sql#exportContext', u'sqlExportOptions': {u'schemaOnly': False}, u'uri': u'gs://models.bbr-recommendations.b17g.services/export/test', u'databases': [u'airflow']}, u'targetId': u'airflow-dev', u'targetLink': u'https://www.googleapis.com/sql/v1beta4/projects/bb-analytics-1/instances/airflow-dev', u'kind': u'sql#operation', u'name': u'0dc8210f-9738-4182-a2f4-5b548427a15c', u'targetProject': u'bb-analytics-1', u'operationType': u'EXPORT', u'selfLink': u'https://www.googleapis.com/sql/v1beta4/projects/bb-analytics-1/operations/0dc8210f-9738-4182-a2f4-5b548427a15c', u'user': u'guillermo.rodriguezcano@bonnierbroadcasting.com'}
+#     def __init__(self, cloudsql, name, poll_sleep=10):
+#         self._cloudsql = cloudsql
+#         self._job_name = name
+#         self._job_id = None
+#         self._job = self._get_job()
+#         self._poll_sleep = poll_sleep
+# 
+#     def _get_job_id_from_name(self):
+#         jobs = self._cloudsql.operations().list(project=project, instance=instance)
+#         jobs = self._dataflow.projects().locations().jobs().list(
+#             projectId=self._project_number,
+#             location=self._job_location
+#         ).execute()
+#         for job in jobs['jobs']:
+#             if job['name'] == self._job_name:
+#                 self._job_id = job['id']
+#                 return job
+#         return None
+# 
+#     def _get_job(self):
+#         if self._job_name:
+#             job = self._get_job_id_from_name()
+#         else:
+#             job = self._dataflow.projects().jobs().get(
+#                 projectId=self._project_number,
+#                 jobId=self._job_id
+#             ).execute()
+# 
+#         if job and 'currentState' in job:
+#             self.log.info(
+#                 'Google Cloud DataFlow job %s is %s',
+#                 job['name'], job['currentState']
+#             )
+#         elif job:
+#             self.log.info(
+#                 'Google Cloud DataFlow with job_id %s has name %s',
+#                 self._job_id, job['name']
+#             )
+#         else:
+#             self.log.info(
+#                 'Google Cloud DataFlow job not available yet..'
+#             )
+# 
+#         return job
+# 
+#     def wait_for_done(self):
+#         while True:
+#             if self._job and 'currentState' in self._job:
+#                 if 'JOB_STATE_DONE' == self._job['currentState']:
+#                     return True
+#                 elif 'JOB_STATE_RUNNING' == self._job['currentState'] and \
+#                      'JOB_TYPE_STREAMING' == self._job['type']:
+#                     return True
+#                 elif 'JOB_STATE_FAILED' == self._job['currentState']:
+#                     raise Exception("Google Cloud Dataflow job {} has failed.".format(
+#                         self._job['name']))
+#                 elif 'JOB_STATE_CANCELLED' == self._job['currentState']:
+#                     raise Exception("Google Cloud Dataflow job {} was cancelled.".format(
+#                         self._job['name']))
+#                 elif 'JOB_STATE_RUNNING' == self._job['currentState']:
+#                     time.sleep(self._poll_sleep)
+#                 elif 'JOB_STATE_PENDING' == self._job['currentState']:
+#                     time.sleep(15)
+#                 else:
+#                     self.log.debug(str(self._job))
+#                     raise Exception(
+#                         "Google Cloud Dataflow job {} was unknown state: {}".format(
+#                             self._job['name'], self._job['currentState']))
+#             else:
+#                 time.sleep(15)
+# 
+#             self._job = self._get_job()
+# 
+#     def get(self):
+#         return self._job
+# 
+# 
+# class _Dataflow(LoggingMixin):
+#     def __init__(self, cmd):
+#         self.log.info("Running command: %s", ' '.join(cmd))
+#         self._proc = subprocess.Popen(
+#             cmd,
+#             shell=False,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             close_fds=True)
+# 
+#     def _line(self, fd):
+#         if fd == self._proc.stderr.fileno():
+#             lines = self._proc.stderr.readlines()
+#             for line in lines:
+#                 self.log.warning(line[:-1])
+#             if lines:
+#                 return lines[-1]
+#         if fd == self._proc.stdout.fileno():
+#             line = self._proc.stdout.readline()
+#             return line
+# 
+#     @staticmethod
+#     def _extract_job(line):
+#         if line is not None:
+#             if line.startswith("Submitted job: "):
+#                 return line[15:-1]
+# 
+#     def wait_for_done(self):
+#         reads = [self._proc.stderr.fileno(), self._proc.stdout.fileno()]
+#         self.log.info("Start waiting for DataFlow process to complete.")
+#         while self._proc.poll() is None:
+#             ret = select.select(reads, [], [], 5)
+#             if ret is not None:
+#                 for fd in ret[0]:
+#                     line = self._line(fd)
+#                     if line:
+#                         self.log.debug(line[:-1])
+#             else:
+#                 self.log.info("Waiting for DataFlow process to complete.")
+#         if self._proc.returncode is not 0:
+#             raise Exception("DataFlow failed with return code {}".format(
+#                 self._proc.returncode))
 
 
 class GoogleCloudSQLHook(GoogleCloudBaseHook):
